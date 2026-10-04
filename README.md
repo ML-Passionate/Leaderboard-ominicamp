@@ -4,7 +4,7 @@ A small web app that shows the **live leaderboard** of an Omnicampus competition
 
 The official leaderboard is a plain list of names and scores. This app reads that list, plots every participant on one chart, hatches the top-20% band and computes the cutoff score, so you can see where everyone stands without scrolling through hundreds of rows.
 
-![Screenshot of the app](screenshot.png)
+![Screenshot of the app](LeaderBoard.jpg)
 
 ---
 
