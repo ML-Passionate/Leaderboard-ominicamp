@@ -150,5 +150,5 @@ omnicamp-leaderboard/
   <a href="https://requests.readthedocs.io/"><img alt="requests" src="https://img.shields.io/badge/requests-%E2%89%A52.31-2B5B84"></a>
   <img alt="Version" src="https://img.shields.io/badge/version-1.0.0-2a78d6">
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green"></a>
-  <a href="https://YOUR-APP-NAME.streamlit.app"><img alt="Open in Streamlit" src="https://static.streamlit.io/badges/streamlit_badge_black_white.svg"></a>
+  <a href="https://leaderboard-ominicamp.streamlit.app"><img alt="Open in Streamlit" src="https://static.streamlit.io/badges/streamlit_badge_black_white.svg"></a>
 </p>
