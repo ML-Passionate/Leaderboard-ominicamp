@@ -1,4 +1,5 @@
 # Omnicampus Leaderboard
+https://leaderboard-ominicamp.streamlit.app
 
 A small web app that shows the **live leaderboard** of an Omnicampus competition. It also shows the **score you need to be in the top 20%**.
 
@@ -23,7 +24,7 @@ The official leaderboard is a plain list of names and scores. This app reads tha
 
 - **X axis:** leaderboard rank (1 = first place).
 - **Y axis:** score.
-- **Blue dots:** participants inside the top 20%.
+- **Green dots:** participants inside the top 20%.
 - **Gray dots:** everyone else.
 - **Hatched band and dashed line:** the top-20% zone and its cutoff score.
 - **Orange dot:** the participant picked in **Find a participant**. The app also says their rank and how far they are from the cutoff.
@@ -73,18 +74,6 @@ pip install -r requirements.txt
 cp .streamlit/secrets.toml.example .streamlit/secrets.toml   # then fill in OMNI_COOKIE
 streamlit run app.py
 ```
-
-### Getting `OMNI_COOKIE`
-
-1. Log in at <https://edu.omnicamp.us> and open the leaderboard.
-2. Open the developer tools. Use **F12** in Chrome or Edge, and **Ctrl+Shift+I** in Opera (**Cmd+Option+I** on Mac).
-3. Go to **Network**, reload the page and click the `leader-board/` request of type *document*.
-4. Under **Request Headers**, copy the value of `cookie:`. It must contain `appSession=…`.
-5. Paste it inside single quotes: `OMNI_COOKIE = '…'`.
-
-When the session expires, the app shows **"Authentication failed"**. Copy a fresh cookie and update the secret.
-
----
 
 ## Deploy (Streamlit Community Cloud, free)
 
