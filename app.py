@@ -107,7 +107,12 @@ def http_session() -> requests.Session:
     s.headers.update({"User-Agent": USER_AGENT, "Accept-Language": "en-US,en;q=0.9"})
     cookie = cfg("OMNI_COOKIE")
     if cookie:
-        s.cookies.update(parse_cookie_header(cookie))
+        jar = parse_cookie_header(cookie)
+        # Keep only the Auth0 session cookies (appSession, appSession.0, ...).
+        # Analytics cookies (_ga, __utm*, cwr_*) are useless here and make the
+        # header so large that the server answers 431.
+        auth = {k: v for k, v in jar.items() if k.startswith("appSession")}
+        s.cookies.update(auth or jar)
     return s
 
 
@@ -161,12 +166,15 @@ def get_token(force_refresh: bool = False) -> str:
 def fetch_raw() -> list[dict]:
     for attempt in range(2):
         token = get_token(force_refresh=attempt > 0)
-        r = http_session().get(
+        # The API only needs the Bearer token: send NO cookies here
+        # (cookies + token together exceed the server's header limit → 431).
+        r = requests.get(
             API_URL,
             headers={
                 "Authorization": f"Bearer {token}",
                 "X-Auth-Token": f"Bearer {token}",
                 "Accept": "application/json",
+                "User-Agent": USER_AGENT,
             },
             timeout=30,
         )
@@ -228,9 +236,72 @@ def cutoff_top(df_valid: pd.DataFrame, fraction: float) -> tuple[float, int]:
     return float(scores[k - 1]), k
 
 
+
+
+# --------------------------------------------------------------------------
+# Visual design
+# --------------------------------------------------------------------------
+INK = "#0b0b0b"          # primary text
+INK_2 = "#52514e"        # secondary text
+INK_3 = "#8a8983"        # muted text / axes
+SURFACE = "#fcfcfb"      # chart surface
+GRID = "#e9e8e4"
+ACCENT = "#2a78d6"       # top band (blue)
+OTHER = "#b4b3ad"        # everyone else (neutral)
+HIGHLIGHT = "#eb6834"    # selected participant (orange)
+FOOTER_AUTHOR = cfg("FOOTER_AUTHOR", "ricardomonteiro")
+
+CSS = f"""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-serif; }}
+.stApp {{ background: #f6f6f4; }}
+#MainMenu, header[data-testid="stHeader"], footer, .stDeployButton {{ visibility: hidden; height: 0; }}
+.block-container {{ padding-top: 2.2rem; padding-bottom: 5rem; max-width: 1180px; }}
+
+.lb-eyebrow {{ color: {ACCENT}; font-weight: 600; font-size: .78rem; letter-spacing: .08em;
+              text-transform: uppercase; margin-bottom: .25rem; }}
+.lb-title {{ color: {INK}; font-size: 2.1rem; font-weight: 700; line-height: 1.15; margin: 0; }}
+.lb-sub {{ color: {INK_2}; font-size: .95rem; margin-top: .35rem; }}
+
+.lb-cards {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px;
+            margin: 1.4rem 0 1rem; }}
+@media (max-width: 800px) {{ .lb-cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
+.lb-card {{ background: #fff; border: 1px solid #e7e6e1; border-radius: 14px; padding: 16px 18px; }}
+.lb-card.hero {{ background: {ACCENT}; border-color: {ACCENT}; }}
+.lb-card .k {{ color: {INK_2}; font-size: .8rem; font-weight: 500; }}
+.lb-card .v {{ color: {INK}; font-size: 1.75rem; font-weight: 700; margin-top: 4px;
+              font-variant-numeric: tabular-nums; }}
+.lb-card .n {{ color: {INK_3}; font-size: .75rem; margin-top: 2px; }}
+.lb-card.hero .k, .lb-card.hero .n {{ color: rgba(255,255,255,.85); }}
+.lb-card.hero .v {{ color: #fff; }}
+
+.lb-note {{ color: {INK_2}; font-size: .82rem; margin: .2rem 0 1rem; }}
+
+div[data-testid="stVerticalBlockBorderWrapper"] {{ background: #fff; border-radius: 14px; }}
+.stButton > button[kind="primary"] {{ background: {INK}; border: 1px solid {INK}; border-radius: 10px;
+                                     font-weight: 600; padding: .55rem 1rem; }}
+.stButton > button[kind="primary"]:hover {{ background: #2b2b2a; border-color: #2b2b2a; }}
+
+.lb-footer {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; text-align: center;
+             padding: 10px 16px; background: rgba(246,246,244,.92); backdrop-filter: blur(6px);
+             border-top: 1px solid #e7e6e1; color: {INK_2}; font-size: .82rem; }}
+.lb-footer b {{ color: {INK}; font-weight: 600; }}
+</style>
+"""
+
+
+def card(label: str, value: str, note: str = "", hero: bool = False) -> str:
+    return (f'<div class="lb-card{" hero" if hero else ""}"><div class="k">{label}</div>'
+            f'<div class="v">{value}</div><div class="n">{note}</div></div>')
+
+
 def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str | None,
                 zoom: bool):
-    fig, ax = plt.subplots(figsize=(11, 6), dpi=110)
+    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10})
+    fig, ax = plt.subplots(figsize=(11, 5.6), dpi=130)
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
     top = df["score"] >= cutoff
 
     ymax = df["score"].max()
@@ -239,40 +310,45 @@ def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str
     ylo, yhi = ymin - pad, ymax + pad
 
     # hatched top band
-    ax.axhspan(cutoff, yhi, facecolor="#2a9d8f", alpha=0.10, edgecolor="#2a9d8f",
-               hatch="///", linewidth=0, zorder=0,
-               label=f"Top {fraction:.0%} (score ≥ {cutoff:.5f})")
-    ax.axhline(cutoff, color="#2a9d8f", lw=1.6, ls="--", zorder=1)
-    ax.annotate(f"cutoff: {cutoff:.5f}", xy=(df["rank"].max(), cutoff),
-                xytext=(-4, 5), textcoords="offset points", ha="right",
-                color="#1d6f65", fontsize=10, fontweight="bold")
+    ax.axhspan(cutoff, yhi, facecolor=ACCENT, alpha=0.07, zorder=0)
+    ax.axhspan(cutoff, yhi, facecolor="none", edgecolor=ACCENT, alpha=0.35,
+               hatch="////", linewidth=0, zorder=0)
+    ax.axhline(cutoff, color=ACCENT, lw=1.5, ls=(0, (5, 3)), zorder=1)
+    ax.annotate(f"Top {fraction:.0%} cutoff  {cutoff:.5f}", xy=(df["rank"].max(), cutoff),
+                xytext=(0, 6), textcoords="offset points", ha="right", va="bottom",
+                color=INK, fontsize=10, fontweight="bold")
 
-    ax.scatter(df.loc[~top, "rank"], df.loc[~top, "score"], s=18, color="#8d99ae",
-               alpha=0.85, label="Other participants", zorder=2)
-    ax.scatter(df.loc[top, "rank"], df.loc[top, "score"], s=22, color="#264653",
-               label=f"Within the top {fraction:.0%}", zorder=3)
+    ax.scatter(df.loc[~top, "rank"], df.loc[~top, "score"], s=22, color=OTHER,
+               edgecolor=SURFACE, linewidth=0.6, label="Other participants", zorder=2)
+    ax.scatter(df.loc[top, "rank"], df.loc[top, "score"], s=26, color=ACCENT,
+               edgecolor=SURFACE, linewidth=0.6, label=f"Top {fraction:.0%}", zorder=3)
 
     if highlight:
         hit = df[df["participant"].str.lower() == highlight.lower()]
         if not hit.empty:
             r = hit.iloc[0]
-            ax.scatter([r["rank"]], [r["score"]], s=140, facecolor="none",
-                       edgecolor="#e76f51", linewidth=2.2, zorder=4)
-            ax.annotate(f"{r['participant']}\n#{int(r['rank'])} · {r['score']:.5f}",
-                        xy=(r["rank"], r["score"]), xytext=(12, -28),
-                        textcoords="offset points", color="#c4472b", fontsize=9,
-                        arrowprops=dict(arrowstyle="-", color="#e76f51"))
+            ax.scatter([r["rank"]], [r["score"]], s=150, color=HIGHLIGHT,
+                       edgecolor=SURFACE, linewidth=2, zorder=5, label=r["participant"])
+            ax.annotate(f"{r['participant']}  #{int(r['rank'])} · {r['score']:.5f}",
+                        xy=(r["rank"], r["score"]), xytext=(14, -22),
+                        textcoords="offset points", color=INK, fontsize=9.5,
+                        fontweight="bold",
+                        arrowprops=dict(arrowstyle="-", color=INK_3, lw=1))
 
     ax.set_ylim(ylo, yhi)
-    ax.set_xlim(0, df["rank"].max() + 2)
-    ax.set_xlabel("Leaderboard rank")
-    ax.set_ylabel("Score")
-    ax.set_title(f"Leaderboard — course {COURSE_ID}, assignment {ASSIGNMENT_ID} "
-                 f"({len(df)} participants with a valid score)", fontsize=12)
-    ax.grid(alpha=0.25)
-    ax.legend(loc="upper right", framealpha=0.9)
-    for s in ("top", "right"):
+    ax.set_xlim(-2, df["rank"].max() + 4)
+    ax.set_xlabel("Leaderboard rank", color=INK_2, labelpad=8)
+    ax.set_ylabel("Score", color=INK_2, labelpad=8)
+    ax.grid(axis="y", color=GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    ax.tick_params(colors=INK_3, length=0, pad=6)
+    for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
+    ax.spines["bottom"].set_color(GRID)
+    leg = ax.legend(loc="upper right", frameon=False, labelcolor=INK_2,
+                    bbox_to_anchor=(1, 1.09), ncol=3, handletextpad=0.3, columnspacing=1.4)
+    for h in leg.legend_handles:
+        h.set_sizes([40])
     fig.tight_layout()
     return fig
 
@@ -282,14 +358,24 @@ def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str
 # --------------------------------------------------------------------------
 def main() -> None:
     st.set_page_config(page_title="Omnicampus Leaderboard", page_icon="📊", layout="wide")
-    st.title("Omnicampus Leaderboard")
+    st.markdown(CSS, unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="lb-footer">Courtesy of <b>{FOOTER_AUTHOR}</b></div>',
+        unsafe_allow_html=True,
+    )
 
-    c1, c2 = st.columns([1, 5])
-    with c1:
-        if st.button("🔄 Reload", type="primary", width="stretch"):
+    head_l, head_r = st.columns([5, 1], vertical_alignment="bottom")
+    with head_l:
+        st.markdown(
+            f'<div class="lb-eyebrow">Course {COURSE_ID} · Assignment {ASSIGNMENT_ID}</div>'
+            f'<h1 class="lb-title">Omnicampus Leaderboard</h1>'
+            f'<div class="lb-sub">Live scores, with the cutoff for the top '
+            f'{TOP_FRACTION:.0%} of participants.</div>',
+            unsafe_allow_html=True,
+        )
+    with head_r:
+        if st.button("↻  Reload", type="primary", width="stretch"):
             load_leaderboard.clear()
-    with c2:
-        st.caption(f"Data is also refreshed automatically every {CACHE_TTL // 60} min.")
 
     try:
         df, fetched_at = load_leaderboard()
@@ -308,50 +394,75 @@ def main() -> None:
     dv = valid_scores(df)
     cutoff, k = cutoff_top(dv, TOP_FRACTION)
     n_in_band = int((dv["score"] >= cutoff).sum())
+    n_invalid = len(df) - len(dv)
 
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric(f"Cutoff score (top {TOP_FRACTION:.0%})", f"{cutoff:.5f}")
-    m2.metric("Participants with a valid score", len(dv),
-              help=f"{len(df) - len(dv)} invalid submissions (negative score) were ignored.")
-    m3.metric("Best score", f"{dv['score'].max():.5f}")
-    m4.metric("Median", f"{dv['score'].median():.5f}")
-
-    st.caption(
-        f"Cutoff = score of rank #{k} (⌈{TOP_FRACTION:.0%} × {len(dv)}⌉). "
-        f"Including ties, {n_in_band} participants are inside the band. "
-        f"{round((1 - TOP_FRACTION) * 100)}th percentile (interpolated): "
-        f"{dv['score'].quantile(1 - TOP_FRACTION):.5f}. "
-        f"Fetched at {fetched_at.strftime('%Y-%m-%d %H:%M:%S')} UTC."
+    st.markdown(
+        '<div class="lb-cards">'
+        + card(f"Top {TOP_FRACTION:.0%} cutoff", f"{cutoff:.5f}", f"score of rank #{k}", hero=True)
+        + card("Participants", f"{len(dv)}",
+               f"{n_invalid} invalid ignored" if n_invalid else "all scores valid")
+        + card("Best score", f"{dv['score'].max():.5f}", dv.iloc[0]["participant"] if SHOW_NAMES else "")
+        + card("Median score", f"{dv['score'].median():.5f}", f"{n_in_band} inside the band")
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f'<div class="lb-note">Cutoff = score of rank #{k} '
+        f'(⌈{TOP_FRACTION:.0%} × {len(dv)}⌉); ties with the cutoff are included. '
+        f'{round((1 - TOP_FRACTION) * 100)}th percentile (interpolated): '
+        f'{dv["score"].quantile(1 - TOP_FRACTION):.5f}. '
+        f'Updated {fetched_at.strftime("%Y-%m-%d %H:%M")} UTC · auto-refresh every '
+        f'{CACHE_TTL // 60} min.</div>',
+        unsafe_allow_html=True,
     )
 
-    o1, o2 = st.columns([3, 1])
-    with o1:
-        names = sorted(dv["participant"].tolist(), key=str.lower) if SHOW_NAMES else []
-        highlight = (st.selectbox("Highlight a participant", [""] + names,
-                                  format_func=lambda x: x or "— none —")
-                     if SHOW_NAMES else None)
-    with o2:
-        zoom = st.toggle("Zoom (hide the bottom 5%)", value=True)
+    tab_chart, tab_table = st.tabs(["Chart", "Table"])
 
-    if highlight:
-        r = dv[dv["participant"] == highlight].iloc[0]
-        gap = cutoff - r["score"]
-        if gap <= 0:
-            st.success(f"**{highlight}** is ranked #{int(r['rank'])} — within the top "
-                       f"{TOP_FRACTION:.0%}.")
-        else:
-            st.warning(f"**{highlight}** is ranked #{int(r['rank'])} — "
-                       f"{gap:.5f} points below the cutoff.")
+    with tab_chart:
+        o1, o2 = st.columns([3, 1], vertical_alignment="bottom")
+        with o1:
+            names = sorted(dv["participant"].tolist(), key=str.lower) if SHOW_NAMES else []
+            highlight = (st.selectbox("Find a participant", [""] + names,
+                                      format_func=lambda x: x or "Type or pick a name…")
+                         if SHOW_NAMES else None)
+        with o2:
+            zoom = st.toggle("Zoom (hide the bottom 5%)", value=True)
 
-    plot_df = dv if SHOW_NAMES else dv.assign(participant="")
-    st.pyplot(make_figure(plot_df, cutoff, TOP_FRACTION, highlight or None, zoom))
+        if highlight:
+            r = dv[dv["participant"] == highlight].iloc[0]
+            gap = cutoff - r["score"]
+            pct = 100 * (r["rank"] - 1) / max(1, len(dv) - 1)
+            if gap <= 0:
+                st.success(f"**{highlight}** is ranked **#{int(r['rank'])}** of {len(dv)} "
+                           f"(top {max(pct, 0.1):.1f}%) — inside the top {TOP_FRACTION:.0%}.")
+            else:
+                st.warning(f"**{highlight}** is ranked **#{int(r['rank'])}** of {len(dv)} — "
+                           f"**{gap:.5f}** points below the cutoff.")
 
-    with st.expander("Full table", expanded=False):
+        plot_df = dv if SHOW_NAMES else dv.assign(participant="")
+        with st.container(border=True):
+            st.pyplot(make_figure(plot_df, cutoff, TOP_FRACTION, highlight or None, zoom),
+                      width="stretch")
+
+    with tab_table:
         show = df.copy()
         show[f"top_{round(TOP_FRACTION * 100)}"] = show["score"] >= cutoff
         if not SHOW_NAMES:
             show = show.drop(columns=["participant"])
-        st.dataframe(show, hide_index=True, width="stretch")
+        st.dataframe(
+            show, hide_index=True, width="stretch", height=520,
+            column_config={
+                "rank": st.column_config.NumberColumn("Rank", width="small"),
+                "participant": st.column_config.TextColumn("Participant"),
+                "score": st.column_config.NumberColumn("Score", format="%.5f"),
+                "status": st.column_config.TextColumn("Status", width="small"),
+                "submissions": st.column_config.NumberColumn("Submissions", width="small"),
+                "first_submission": st.column_config.DatetimeColumn("First submission"),
+                "last_update": st.column_config.DatetimeColumn("Last update"),
+                f"top_{round(TOP_FRACTION * 100)}": st.column_config.CheckboxColumn(
+                    f"Top {TOP_FRACTION:.0%}", width="small"),
+            },
+        )
         st.download_button("Download CSV", show.to_csv(index=False).encode("utf-8"),
                            file_name="leaderboard.csv", mime="text/csv")
 
