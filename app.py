@@ -108,11 +108,12 @@ def http_session() -> requests.Session:
     cookie = cfg("OMNI_COOKIE")
     if cookie:
         jar = parse_cookie_header(cookie)
-        # Keep only the Auth0 session cookies (appSession, appSession.0, ...).
-        # Analytics cookies (_ga, __utm*, cwr_*) are useless here and make the
-        # header so large that the server answers 431.
-        auth = {k: v for k, v in jar.items() if k.startswith("appSession")}
-        s.cookies.update(auth or jar)
+        # Drop analytics/tracking cookies (_ga, __utm*, cwr_*, ...): they are
+        # useless here and make the header large. Everything else is kept, so
+        # the session cookie survives whatever its name is.
+        noise = ("_ga", "_gid", "_gat", "__utm", "cwr_", "_fbp", "_gcl", "_hj",
+                 "ajs_", "mp_", "intercom")
+        s.cookies.update({k: v for k, v in jar.items() if not k.startswith(noise)})
     return s
 
 
@@ -136,7 +137,8 @@ def token_from_page(session: requests.Session) -> str:
     props = json.loads(m.group(1)).get("props", {}).get("pageProps", {})
     token = props.get("accessToken")
     if not token:
-        raise AuthError("The page returned no accessToken — the cookie is not authenticated.")
+        raise AuthError("The page returned no accessToken — the session cookie has expired "
+                        "or is incomplete. Copy a fresh cookie from a logged-in browser.")
     return token
 
 
