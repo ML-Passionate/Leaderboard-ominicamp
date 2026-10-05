@@ -29,6 +29,7 @@ import json
 import math
 import os
 import re
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -62,6 +63,10 @@ ASSIGNMENT_ID = cfg("OMNI_ASSIGNMENT_ID", "1038")
 TOP_FRACTION = float(cfg("TOP_FRACTION", "0.20"))
 SHOW_NAMES = cfg("SHOW_NAMES", "true").lower() in ("1", "true", "yes")
 CACHE_TTL = int(cfg("CACHE_TTL_SECONDS", "300"))  # automatic refresh every 5 min
+# How often the app re-opens the leaderboard page to keep the session alive.
+# The site renews its session cookie on each visit (like a browser does);
+# without these visits the copied cookie expires after about a day.
+KEEPALIVE_SECONDS = int(cfg("KEEPALIVE_SECONDS", "1800"))
 
 PAGE_URL = f"{BASE_URL}/en/courses/{COURSE_ID}/assignments/{ASSIGNMENT_ID}/leader-board/"
 API_URL = f"{BASE_URL}/api/v3/courses/{COURSE_ID}/assignments/{ASSIGNMENT_ID}/leader-board"
@@ -113,23 +118,41 @@ def http_session() -> requests.Session:
         # the session cookie survives whatever its name is.
         noise = ("_ga", "_gid", "_gat", "__utm", "cwr_", "_fbp", "_gcl", "_hj",
                  "ajs_", "mp_", "intercom")
-        s.cookies.update({k: v for k, v in jar.items() if not k.startswith(noise)})
+        host = requests.utils.urlparse(BASE_URL).hostname
+        for k, v in jar.items():
+            if not k.startswith(noise):
+                s.cookies.set(k, v, domain=host, path="/")
     return s
 
 
 @st.cache_resource
 def token_box() -> dict:
-    return {"token": None, "exp": 0.0}
+    return {"token": None, "exp": 0.0, "page_at": 0.0, "lock": threading.Lock(),
+            "keepalive_error": None}
+
+
+def adopt_renewed_cookies(session: requests.Session, response: requests.Response) -> None:
+    """Make cookies renewed by the server (Set-Cookie) replace the old values.
+
+    Without this, a renewed cookie can be stored next to the original one
+    (different cookie domain) and both would be sent.
+    """
+    for c in response.cookies:
+        for old in [o for o in session.cookies if o.name == c.name]:
+            session.cookies.clear(old.domain, old.path, old.name)
+        session.cookies.set(c.name, c.value, domain=c.domain, path=c.path or "/")
 
 
 def token_from_page(session: requests.Session) -> str:
     """Open the leaderboard page with the cookie and extract accessToken from __NEXT_DATA__."""
     r = session.get(PAGE_URL, timeout=30, allow_redirects=False)
+    adopt_renewed_cookies(session, r)
     if r.is_redirect:
         loc = r.headers.get("Location", "")
         if "login" in loc or "auth0.com" in loc:
             raise AuthError("The session cookie has expired or is invalid (redirected to login).")
         r = session.get(requests.compat.urljoin(PAGE_URL, loc), timeout=30)
+        adopt_renewed_cookies(session, r)
     r.raise_for_status()
     m = re.search(r'<script id="__NEXT_DATA__"[^>]*>(.*?)</script>', r.text, re.S)
     if not m:
@@ -142,13 +165,26 @@ def token_from_page(session: requests.Session) -> str:
     return token
 
 
+def refresh_from_page(session: requests.Session, box: dict) -> str:
+    """Visit the page (renewing the session cookie) and store the fresh token."""
+    with box["lock"]:
+        token = token_from_page(session)  # requests stores the renewed Set-Cookie
+        box["token"], box["exp"] = token, jwt_exp(token) or time.time() + 3600
+        box["page_at"] = time.time()
+        box["keepalive_error"] = None
+        return token
+
+
 def get_token(force_refresh: bool = False) -> str:
     box = token_box()
-    if not force_refresh and box["token"] and box["exp"] - time.time() > 120:
+    use_cookie = bool(cfg("OMNI_COOKIE"))
+    fresh_page = time.time() - box["page_at"] < KEEPALIVE_SECONDS
+    if (not force_refresh and box["token"] and box["exp"] - time.time() > 120
+            and (fresh_page or not use_cookie)):
         return box["token"]
 
-    if cfg("OMNI_COOKIE"):
-        token = token_from_page(http_session())
+    if use_cookie:
+        return refresh_from_page(http_session(), box)
     elif cfg("OMNI_ACCESS_TOKEN"):
         token = cfg("OMNI_ACCESS_TOKEN").strip()
         if token.lower().startswith("bearer "):
@@ -160,6 +196,29 @@ def get_token(force_refresh: bool = False) -> str:
 
     box["token"], box["exp"] = token, jwt_exp(token) or time.time() + 3600
     return token
+
+
+@st.cache_resource
+def start_keepalive() -> threading.Thread:
+    """Background thread that re-visits the page every KEEPALIVE_SECONDS.
+
+    It keeps the Omnicampus session rolling even when nobody opens the app.
+    It runs only while the Streamlit server is up; if the app goes to sleep
+    or restarts, it starts again from the cookie stored in the secrets.
+    """
+    session, box = http_session(), token_box()
+
+    def loop() -> None:
+        while True:
+            time.sleep(KEEPALIVE_SECONDS)
+            try:
+                refresh_from_page(session, box)
+            except Exception as e:  # keep trying; the UI shows the error
+                box["keepalive_error"] = f"{type(e).__name__}: {e}"
+
+    t = threading.Thread(target=loop, name="omni-keepalive", daemon=True)
+    t.start()
+    return t
 
 
 # --------------------------------------------------------------------------
@@ -378,6 +437,9 @@ def main() -> None:
     with head_r:
         if st.button("↻  Reload", type="primary", width="stretch"):
             load_leaderboard.clear()
+
+    if cfg("OMNI_COOKIE"):
+        start_keepalive()
 
     try:
         df, fetched_at = load_leaderboard()
