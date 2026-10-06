@@ -48,14 +48,39 @@ import streamlit as st  # noqa: E402
 BASE_URL = os.environ.get("OMNI_BASE_URL", "https://edu.omnicamp.us")
 
 
+SECRETS_PROBLEM: list[str] = []  # filled when the secrets can't be read
+
+
 def cfg(name: str, default: str | None = None) -> str | None:
     """Read from st.secrets (Streamlit Cloud), falling back to environment variables."""
     try:
         if name in st.secrets:
-            return str(st.secrets[name])
-    except Exception:  # no secrets.toml
-        pass
+            value = str(st.secrets[name]).strip()
+            if value:
+                return value
+    except Exception as e:  # missing or malformed secrets
+        msg = f"{type(e).__name__}: {e}"
+        if msg not in SECRETS_PROBLEM:
+            SECRETS_PROBLEM.append(msg)
     return os.environ.get(name, default)
+
+
+def secrets_diagnosis() -> str:
+    """Explain why no credential was found, without revealing any secret value."""
+    if SECRETS_PROBLEM:
+        return ("Streamlit could not read the Secrets (usually a formatting error, e.g. a "
+                "missing quote or a line break inside the cookie). Details: "
+                + SECRETS_PROBLEM[0][:300])
+    try:
+        keys = list(st.secrets.keys())
+    except Exception:
+        keys = []
+    if not keys:
+        return "The Secrets box is empty — paste OMNI_COOKIE = '...' and save."
+    near = [k for k in keys if "COOKIE" in k.upper() or "TOKEN" in k.upper()]
+    hint = (f" Did you mean OMNI_COOKIE? Found: {', '.join(near)}." if near else "")
+    return (f"Secrets were read, but OMNI_COOKIE is missing or empty. "
+            f"Keys found: {', '.join(keys)}.{hint}")
 
 
 COURSE_ID = cfg("OMNI_COURSE_ID", "170")
@@ -192,7 +217,8 @@ def get_token(force_refresh: bool = False) -> str:
         if jwt_exp(token) and jwt_exp(token) < time.time():
             raise AuthError("OMNI_ACCESS_TOKEN has expired — get a new one or use OMNI_COOKIE.")
     else:
-        raise AuthError("No credentials configured (OMNI_COOKIE or OMNI_ACCESS_TOKEN).")
+        raise AuthError("No credentials configured (OMNI_COOKIE or OMNI_ACCESS_TOKEN). "
+                        + secrets_diagnosis())
 
     box["token"], box["exp"] = token, jwt_exp(token) or time.time() + 3600
     return token
