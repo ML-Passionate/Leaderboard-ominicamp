@@ -337,6 +337,8 @@ ACCENT = "#2a78d6"       # top band (blue)
 OTHER = "#b4b3ad"        # everyone else (neutral)
 HIGHLIGHT = "#eb6834"    # selected participant (orange)
 FOOTER_AUTHOR = cfg("FOOTER_AUTHOR", "ricardomonteiro")
+TITLE_LINE1 = cfg("TITLE_LINE1", "GCI World 2026 September - Matsuo-Iwasawa Lab Tokyo")
+TITLE_LINE2 = cfg("TITLE_LINE2", "Home Credit Default Risk Competition Leaderboard")
 
 CSS = f"""
 <style>
@@ -346,10 +348,16 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 #MainMenu, header[data-testid="stHeader"], footer, .stDeployButton {{ visibility: hidden; height: 0; }}
 .block-container {{ padding-top: 2.2rem; padding-bottom: 5rem; max-width: 1180px; }}
 
-.lb-eyebrow {{ color: {ACCENT}; font-weight: 600; font-size: .78rem; letter-spacing: .08em;
-              text-transform: uppercase; margin-bottom: .25rem; }}
-.lb-title {{ color: {INK}; font-size: 2.1rem; font-weight: 700; line-height: 1.15; margin: 0; }}
-.lb-sub {{ color: {INK_2}; font-size: .95rem; margin-top: .35rem; }}
+.lb-head {{ text-align: center; margin-bottom: .9rem; }}
+.lb-title {{ margin: 0; padding: 0; line-height: 1.2; }}
+.lb-title .l1 {{ display: block; color: {ACCENT}; font-size: 1.15rem; font-weight: 600; }}
+.lb-title .l2 {{ display: block; color: {INK}; font-size: 2.1rem; font-weight: 700;
+                margin-top: .3rem; }}
+@media (max-width: 700px) {{
+  .lb-title .l1 {{ font-size: .95rem; }}
+  .lb-title .l2 {{ font-size: 1.55rem; }}
+}}
+.lb-sub {{ color: {INK_2}; font-size: .95rem; margin-top: .6rem; }}
 
 .lb-cards {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px;
             margin: 1.4rem 0 1rem; }}
@@ -444,23 +452,23 @@ def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str
 # User interface
 # --------------------------------------------------------------------------
 def main() -> None:
-    st.set_page_config(page_title="Omnicampus Leaderboard", page_icon="📊", layout="wide")
+    st.set_page_config(page_title=TITLE_LINE2, page_icon="📊", layout="wide")
     st.markdown(CSS, unsafe_allow_html=True)
     st.markdown(
         f'<div class="lb-footer">Courtesy of <b>{FOOTER_AUTHOR}</b></div>',
         unsafe_allow_html=True,
     )
 
-    head_l, head_r = st.columns([5, 1], vertical_alignment="bottom")
-    with head_l:
-        st.markdown(
-            f'<div class="lb-eyebrow">Course {COURSE_ID} · Assignment {ASSIGNMENT_ID}</div>'
-            f'<h1 class="lb-title">Omnicampus Leaderboard</h1>'
-            f'<div class="lb-sub">Live scores, with the cutoff for the top '
-            f'{TOP_FRACTION:.0%} of participants.</div>',
-            unsafe_allow_html=True,
-        )
-    with head_r:
+    st.markdown(
+        f'<div class="lb-head"><div class="lb-title" role="heading" aria-level="1">'
+        f'<span class="l1">{TITLE_LINE1}</span>'
+        f'<span class="l2">{TITLE_LINE2}</span></div>'
+        f'<div class="lb-sub">Live scores, with the cutoff for the top '
+        f'{TOP_FRACTION:.0%} of participants.</div></div>',
+        unsafe_allow_html=True,
+    )
+    _, mid, _ = st.columns([2, 1, 2])
+    with mid:
         if st.button("↻  Reload", type="primary", width="stretch"):
             load_leaderboard.clear()
 
