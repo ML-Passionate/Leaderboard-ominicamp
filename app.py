@@ -337,8 +337,8 @@ ACCENT = "#2a78d6"       # top band (blue)
 OTHER = "#b4b3ad"        # everyone else (neutral)
 HIGHLIGHT = "#eb6834"    # selected participant (orange)
 FOOTER_AUTHOR = cfg("FOOTER_AUTHOR", "ricardomonteiro")
-TITLE_LINE1 = cfg("TITLE_LINE1", "GCI World 2026 September - Matsuo-Iwasawa Lab Tokyo")
-TITLE_LINE2 = cfg("TITLE_LINE2", "Home Credit Default Risk Competition Leaderboard")
+TITLE_LINE1 = cfg("TITLE_LINE1", "GCI World 2026 September")
+TITLE_LINE2 = cfg("TITLE_LINE2", "Home Credit Default Risk Competition (Unofficial) Leaderboard")
 
 CSS = f"""
 <style>
