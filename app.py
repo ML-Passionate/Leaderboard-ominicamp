@@ -390,9 +390,12 @@ HIGHLIGHT = "#eb6834"    # selected participant (orange)
 # group colors: categorical slots 1-3 of the validated palette (colorblind-safe),
 # each with its own marker shape as a secondary encoding
 GROUP_STYLE = {
-    GROUP_TOP: {"color": "#2a78d6", "marker": "o"},
-    GROUP_MID: {"color": "#eb6834", "marker": "s"},
-    GROUP_LOW: {"color": "#1baf7a", "marker": "^"},
+    GROUP_TOP: {"color": "#2a78d6", "marker": "o", "icon": "🏆",
+                "tagline": "Honor-student zone. Keep defending it!"},
+    GROUP_MID: {"color": "#eb6834", "marker": "s", "icon": "🧗",
+                "tagline": "Climbing toward the cutoff. Almost there!"},
+    GROUP_LOW: {"color": "#1baf7a", "marker": "^", "icon": "🌱",
+                "tagline": "Growing fast. Every experiment counts."},
 }
 FOOTER_AUTHOR = cfg("FOOTER_AUTHOR", "ricardomonteiro")
 TITLE_LINE1 = cfg("TITLE_LINE1", "GCI World 2026 September")
@@ -420,8 +423,21 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 .lb-cards {{ display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px;
             margin: 1.4rem 0 1rem; }}
 @media (max-width: 800px) {{ .lb-cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
+.lb-cards.g3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
+@media (max-width: 760px) {{ .lb-cards.g3 {{ grid-template-columns: 1fr; }} }}
 .lb-card {{ background: #fff; border: 1px solid #e7e6e1; border-radius: 14px; padding: 16px 18px; }}
 .lb-card.hero {{ background: {ACCENT}; border-color: {ACCENT}; }}
+.lb-group {{ position: relative; transition: transform .18s ease, box-shadow .18s ease; }}
+.lb-group:hover {{ transform: translateY(-3px); box-shadow: 0 8px 22px rgba(0,0,0,.07); }}
+.lb-group .lb-icon {{ position: absolute; top: 14px; right: 14px; width: 46px; height: 46px;
+                     border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                     font-size: 1.55rem; line-height: 1; }}
+.lb-group:hover .lb-icon {{ animation: lb-wiggle .6s ease; }}
+@keyframes lb-wiggle {{ 0%,100% {{ transform: rotate(0); }} 25% {{ transform: rotate(-12deg); }}
+                        50% {{ transform: rotate(10deg) scale(1.08); }} 75% {{ transform: rotate(-4deg); }} }}
+@media (prefers-reduced-motion: reduce) {{ .lb-group, .lb-group:hover .lb-icon {{ animation: none; transition: none; }} }}
+.lb-group .tag {{ color: {INK_2}; font-size: .82rem; font-weight: 600; font-style: italic;
+                margin: 4px 0 6px; }}
 .lb-card .k {{ color: {INK_2}; font-size: .8rem; font-weight: 500; }}
 .lb-card .v {{ color: {INK}; font-size: 1.75rem; font-weight: 700; margin-top: 4px;
               font-variant-numeric: tabular-nums; }}
@@ -570,11 +586,15 @@ def make_groups_figure(dg: pd.DataFrame, info: dict, highlight: str | None, zoom
 
 
 def group_card(name: str, part: pd.DataFrame, total: int) -> str:
-    color = GROUP_STYLE[name]["color"]
+    style = GROUP_STYLE[name]
+    color = style["color"]
     rng = (f"{part['score'].min():.5f} – {part['score'].max():.5f}" if len(part) else "—")
     share = f"{100 * len(part) / max(total, 1):.0f}% of participants"
-    return (f'<div class="lb-card" style="border-top: 4px solid {color};">'
+    return (f'<div class="lb-card lb-group" style="border-top: 4px solid {color};">'
+            f'<div class="lb-icon" style="background: {color}1f;" aria-hidden="true">'
+            f'{style["icon"]}</div>'
             f'<div class="k">{name}</div><div class="v">{len(part)}</div>'
+            f'<div class="tag">{style["tagline"]}</div>'
             f'<div class="n">{share}<br>scores {rng}</div></div>')
 
 
@@ -672,7 +692,7 @@ def main() -> None:
 
     with tab_groups:
         st.markdown(
-            '<div class="lb-cards" style="grid-template-columns: repeat(3, minmax(0, 1fr));">'
+            '<div class="lb-cards g3">'
             + "".join(group_card(g, dg[dg["group"] == g], len(dg)) for g in GROUP_STYLE)
             + "</div>",
             unsafe_allow_html=True,
