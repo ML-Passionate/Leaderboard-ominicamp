@@ -325,6 +325,57 @@ def cutoff_top(df_valid: pd.DataFrame, fraction: float) -> tuple[float, int]:
 
 
 
+GROUP_TOP = f"Top {TOP_FRACTION:.0%}"
+GROUP_MID = "Stuck in the middle"
+GROUP_LOW = "Still learning"
+
+
+def kmeans_1d_two(x: np.ndarray) -> float:
+    """Exact k-means with k=2 for one-dimensional data.
+
+    In 1-D the optimal 2-means split is a single threshold, so we can test
+    every split point of the sorted scores and keep the one with the lowest
+    within-cluster sum of squares. Deterministic (no random init) and exact.
+    Returns the threshold: scores >= threshold go to the upper cluster.
+    """
+    x = np.sort(np.asarray(x, dtype=float))
+    n = len(x)
+    if n < 2 or x[0] == x[-1]:
+        return float(x[0]) if n else 0.0
+    c, c2 = np.cumsum(x), np.cumsum(x * x)
+    i = np.arange(1, n)                                   # size of the lower cluster
+    sse_lo = c2[i - 1] - c[i - 1] ** 2 / i
+    sse_hi = (c2[-1] - c2[i - 1]) - (c[-1] - c[i - 1]) ** 2 / (n - i)
+    best = int(np.argmin(sse_lo + sse_hi)) + 1
+    return float(x[best])
+
+
+def assign_groups(dv: pd.DataFrame, cutoff: float) -> tuple[pd.DataFrame, dict]:
+    """Split participants into Top 20% / Stuck in the middle / Still learning.
+
+    * Top 20%: score >= cutoff.
+    * The rest is split with 1-D k-means (k=2). Extreme low scores (below
+      Q1 - 1.5·IQR, e.g. 0 or 0.5) would otherwise form a tiny cluster of
+      their own, so they are left out of the k-means fit and assigned to
+      "Still learning".
+    """
+    out = dv.copy()
+    rest = out.loc[out["score"] < cutoff, "score"].to_numpy()
+    info = {"cutoff": cutoff, "split": None, "fence": None, "n_outliers": 0}
+    if len(rest) >= 4:
+        q1, q3 = np.percentile(rest, [25, 75])
+        fence = q1 - 1.5 * (q3 - q1)
+        core = rest[rest >= fence]
+        split = kmeans_1d_two(core) if len(core) >= 2 else cutoff
+        info.update(split=split, fence=float(fence), n_outliers=int((rest < fence).sum()))
+    else:
+        split = cutoff  # too few people to split: everyone below the cutoff is "Still learning"
+        info["split"] = split
+    out["group"] = np.where(out["score"] >= cutoff, GROUP_TOP,
+                            np.where(out["score"] >= split, GROUP_MID, GROUP_LOW))
+    return out, info
+
+
 # --------------------------------------------------------------------------
 # Visual design
 # --------------------------------------------------------------------------
@@ -336,6 +387,13 @@ GRID = "#e9e8e4"
 ACCENT = "#2a78d6"       # top band (blue)
 OTHER = "#b4b3ad"        # everyone else (neutral)
 HIGHLIGHT = "#eb6834"    # selected participant (orange)
+# group colors: categorical slots 1-3 of the validated palette (colorblind-safe),
+# each with its own marker shape as a secondary encoding
+GROUP_STYLE = {
+    GROUP_TOP: {"color": "#2a78d6", "marker": "o"},
+    GROUP_MID: {"color": "#eb6834", "marker": "s"},
+    GROUP_LOW: {"color": "#1baf7a", "marker": "^"},
+}
 FOOTER_AUTHOR = cfg("FOOTER_AUTHOR", "ricardomonteiro")
 TITLE_LINE1 = cfg("TITLE_LINE1", "GCI World 2026 September")
 TITLE_LINE2 = cfg("TITLE_LINE2", "Home Credit Default Risk Competition (Unofficial) Leaderboard")
@@ -448,6 +506,78 @@ def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str
     return fig
 
 
+def make_groups_figure(dg: pd.DataFrame, info: dict, highlight: str | None, zoom: bool):
+    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10})
+    fig, ax = plt.subplots(figsize=(11, 5.6), dpi=130)
+    fig.patch.set_facecolor(SURFACE)
+    ax.set_facecolor(SURFACE)
+
+    ymax = dg["score"].max()
+    ymin = float(dg["score"].quantile(0.05)) if zoom else float(dg["score"].min())
+    pad = (ymax - ymin) * 0.06 or 0.01
+    ylo, yhi = ymin - pad, ymax + pad
+    xmax = dg["rank"].max()
+
+    # light background band per group + boundary lines with direct labels
+    bands = [(GROUP_TOP, info["cutoff"], yhi),
+             (GROUP_MID, info["split"], info["cutoff"]),
+             (GROUP_LOW, ylo, info["split"])]
+    for name, lo, hi in bands:
+        if hi > lo:
+            ax.axhspan(max(lo, ylo), min(hi, yhi), color=GROUP_STYLE[name]["color"],
+                       alpha=0.06, zorder=0, linewidth=0)
+    for y, label in ((info["cutoff"], f"top {TOP_FRACTION:.0%} cutoff  {info['cutoff']:.5f}"),
+                     (info["split"], f"k-means split  {info['split']:.5f}")):
+        if ylo < y < yhi:
+            ax.axhline(y, color=INK_3, lw=1.1, ls=(0, (5, 3)), zorder=1)
+            ax.annotate(label, xy=(xmax, y), xytext=(0, 5), textcoords="offset points",
+                        ha="right", va="bottom", color=INK_2, fontsize=9)
+
+    for name, st_ in GROUP_STYLE.items():
+        part = dg[dg["group"] == name]
+        visible = part[part["score"] >= ylo]
+        ax.scatter(visible["rank"], visible["score"], s=26, color=st_["color"],
+                   marker=st_["marker"], edgecolor=SURFACE, linewidth=0.6, zorder=3,
+                   label=f"{name} ({len(part)})")
+
+    if highlight:
+        hit = dg[dg["participant"].str.lower() == highlight.lower()]
+        if not hit.empty:
+            r = hit.iloc[0]
+            ax.scatter([r["rank"]], [r["score"]], s=190, facecolor="none", edgecolor=INK,
+                       linewidth=2, zorder=5)
+            ax.annotate(f"{r['participant']}  #{int(r['rank'])} · {r['group']}",
+                        xy=(r["rank"], r["score"]), xytext=(14, -22),
+                        textcoords="offset points", color=INK, fontsize=9.5,
+                        fontweight="bold", arrowprops=dict(arrowstyle="-", color=INK_3, lw=1))
+
+    ax.set_ylim(ylo, yhi)
+    ax.set_xlim(-2, xmax + 4)
+    ax.set_xlabel("Leaderboard rank", color=INK_2, labelpad=8)
+    ax.set_ylabel("Score", color=INK_2, labelpad=8)
+    ax.grid(axis="y", color=GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    ax.tick_params(colors=INK_3, length=0, pad=6)
+    for side in ("top", "right", "left"):
+        ax.spines[side].set_visible(False)
+    ax.spines["bottom"].set_color(GRID)
+    leg = ax.legend(loc="upper right", frameon=False, labelcolor=INK_2,
+                    bbox_to_anchor=(1, 1.09), ncol=3, handletextpad=0.3, columnspacing=1.4)
+    for h in leg.legend_handles:
+        h.set_sizes([46])
+    fig.tight_layout()
+    return fig
+
+
+def group_card(name: str, part: pd.DataFrame, total: int) -> str:
+    color = GROUP_STYLE[name]["color"]
+    rng = (f"{part['score'].min():.5f} – {part['score'].max():.5f}" if len(part) else "—")
+    share = f"{100 * len(part) / max(total, 1):.0f}% of participants"
+    return (f'<div class="lb-card" style="border-top: 4px solid {color};">'
+            f'<div class="k">{name}</div><div class="v">{len(part)}</div>'
+            f'<div class="n">{share}<br>scores {rng}</div></div>')
+
+
 # --------------------------------------------------------------------------
 # User interface
 # --------------------------------------------------------------------------
@@ -514,36 +644,58 @@ def main() -> None:
         unsafe_allow_html=True,
     )
 
-    tab_chart, tab_table = st.tabs(["Chart", "Table"])
+    dg, ginfo = assign_groups(dv, cutoff)
+
+    names = sorted(dv["participant"].tolist(), key=str.lower) if SHOW_NAMES else []
+    highlight = (st.selectbox("Find a participant", [""] + names,
+                              format_func=lambda x: x or "Type or pick a name…")
+                 if SHOW_NAMES else None)
+    if highlight:
+        r = dg[dg["participant"] == highlight].iloc[0]
+        gap = cutoff - r["score"]
+        pct = 100 * (r["rank"] - 1) / max(1, len(dv) - 1)
+        if gap <= 0:
+            st.success(f"**{highlight}** is ranked **#{int(r['rank'])}** of {len(dv)} "
+                       f"(top {max(pct, 0.1):.1f}%) — inside the top {TOP_FRACTION:.0%}.")
+        else:
+            st.warning(f"**{highlight}** is ranked **#{int(r['rank'])}** of {len(dv)} "
+                       f"— group **{r['group']}** — **{gap:.5f}** points below the cutoff.")
+
+    tab_chart, tab_groups, tab_table = st.tabs(["Chart", "Groups", "Table"])
 
     with tab_chart:
-        o1, o2 = st.columns([3, 1], vertical_alignment="bottom")
-        with o1:
-            names = sorted(dv["participant"].tolist(), key=str.lower) if SHOW_NAMES else []
-            highlight = (st.selectbox("Find a participant", [""] + names,
-                                      format_func=lambda x: x or "Type or pick a name…")
-                         if SHOW_NAMES else None)
-        with o2:
-            zoom = st.toggle("Zoom (hide the bottom 5%)", value=True)
-
-        if highlight:
-            r = dv[dv["participant"] == highlight].iloc[0]
-            gap = cutoff - r["score"]
-            pct = 100 * (r["rank"] - 1) / max(1, len(dv) - 1)
-            if gap <= 0:
-                st.success(f"**{highlight}** is ranked **#{int(r['rank'])}** of {len(dv)} "
-                           f"(top {max(pct, 0.1):.1f}%) — inside the top {TOP_FRACTION:.0%}.")
-            else:
-                st.warning(f"**{highlight}** is ranked **#{int(r['rank'])}** of {len(dv)} — "
-                           f"**{gap:.5f}** points below the cutoff.")
-
+        zoom = st.toggle("Zoom (hide the bottom 5%)", value=True, key="zoom_chart")
         plot_df = dv if SHOW_NAMES else dv.assign(participant="")
         with st.container(border=True):
             st.pyplot(make_figure(plot_df, cutoff, TOP_FRACTION, highlight or None, zoom),
                       width="stretch")
 
+    with tab_groups:
+        st.markdown(
+            '<div class="lb-cards" style="grid-template-columns: repeat(3, minmax(0, 1fr));">'
+            + "".join(group_card(g, dg[dg["group"] == g], len(dg)) for g in GROUP_STYLE)
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+        outl = (f" {ginfo['n_outliers']} extreme low scores (below {ginfo['fence']:.3f}) "
+                f"were left out of the fit and counted as {GROUP_LOW}."
+                if ginfo["n_outliers"] else "")
+        st.markdown(
+            f'<div class="lb-note"><b>{GROUP_TOP}</b>: score ≥ {cutoff:.5f}. '
+            f'The rest is split in two with <b>k-means (k = 2)</b> on the score: '
+            f'<b>{GROUP_MID}</b> ≥ {ginfo["split"]:.5f} > <b>{GROUP_LOW}</b>.{outl} '
+            f'Groups are recomputed on every reload.</div>',
+            unsafe_allow_html=True,
+        )
+        zoom_g = st.toggle("Zoom (hide the bottom 5%)", value=True, key="zoom_groups")
+        plot_dg = dg if SHOW_NAMES else dg.assign(participant="")
+        with st.container(border=True):
+            st.pyplot(make_groups_figure(plot_dg, ginfo, highlight or None, zoom_g),
+                      width="stretch")
+
     with tab_table:
-        show = df.copy()
+        show = df.merge(dg[["rank", "group"]], on="rank", how="left")
+        show["group"] = show["group"].fillna("Invalid score")
         show[f"top_{round(TOP_FRACTION * 100)}"] = show["score"] >= cutoff
         if not SHOW_NAMES:
             show = show.drop(columns=["participant"])
@@ -554,6 +706,7 @@ def main() -> None:
                 "participant": st.column_config.TextColumn("Participant"),
                 "score": st.column_config.NumberColumn("Score", format="%.5f"),
                 "status": st.column_config.TextColumn("Status", width="small"),
+                "group": st.column_config.TextColumn("Group"),
                 "submissions": st.column_config.NumberColumn("Submissions", width="small"),
                 "first_submission": st.column_config.DatetimeColumn("First submission"),
                 "last_update": st.column_config.DatetimeColumn("Last update"),
