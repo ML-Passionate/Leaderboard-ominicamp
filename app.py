@@ -409,6 +409,20 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 #MainMenu, header[data-testid="stHeader"], footer, .stDeployButton {{ visibility: hidden; height: 0; }}
 .block-container {{ padding-top: 2.2rem; padding-bottom: 5rem; max-width: 1180px; }}
 
+/* Keep Streamlit's native controls readable when the browser prefers dark mode. */
+.stApp, .stApp [data-testid="stTabs"] {{ color: #202124; }}
+.stApp [data-testid="stTabs"] button[role="tab"] {{ color: #5f6368 !important; }}
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {{ color: {ACCENT} !important; }}
+.stApp [data-testid="stTabs"] [data-testid="stMarkdownContainer"] p {{ color: inherit; }}
+.stApp [data-testid="stWidgetLabel"] p,
+.stApp [data-testid="stWidgetLabel"] label {{ color: #202124 !important; }}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div {{
+  background: #fff; color: #202124; border-color: #d6d6d6;
+}}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] input {{ color: #202124; }}
+.stApp [data-testid="stSelectbox"] svg {{ fill: #5f6368; }}
+.stApp [data-testid="stToggle"] [data-testid="stWidgetLabel"] {{ color: #202124 !important; }}
+
 .lb-head {{ text-align: center; margin-bottom: .9rem; }}
 .lb-title {{ margin: 0; padding: 0; line-height: 1.2; }}
 .lb-title .l1 {{ display: block; color: {ACCENT}; font-size: 1.15rem; font-weight: 600; }}
