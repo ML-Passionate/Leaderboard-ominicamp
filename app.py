@@ -405,23 +405,28 @@ CSS = f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-serif; }}
-.stApp {{ background: #f6f6f4; }}
+.stApp {{ --lb-bg:#f6f6f4; --lb-surface:#fff; --lb-text:#202124; --lb-muted:#5f6368; --lb-border:#e7e6e1; background:var(--lb-bg); color:var(--lb-text); color-scheme:light; }}
 #MainMenu, header[data-testid="stHeader"], footer, .stDeployButton {{ visibility: hidden; height: 0; }}
 .block-container {{ padding-top: 2.2rem; padding-bottom: 5rem; max-width: 1180px; }}
 
-/* Keep Streamlit's native controls readable when the browser prefers dark mode. */
-.stApp, .stApp [data-testid="stTabs"] {{ color: #202124; }}
-.stApp [data-testid="stTabs"] button[role="tab"] {{ color: #5f6368 !important; }}
+/* Keep native controls and app cards readable in every selected theme. */
+.stApp [data-testid="stTabs"] {{ color: var(--lb-text); }}
+.stApp [data-testid="stTabs"] button[role="tab"] {{ color: var(--lb-muted) !important; }}
 .stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {{ color: {ACCENT} !important; }}
 .stApp [data-testid="stTabs"] [data-testid="stMarkdownContainer"] p {{ color: inherit; }}
 .stApp [data-testid="stWidgetLabel"] p,
-.stApp [data-testid="stWidgetLabel"] label {{ color: #202124 !important; }}
+.stApp [data-testid="stWidgetLabel"] label {{ color: var(--lb-text) !important; }}
 .stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div {{
-  background: #fff; color: #202124; border-color: #d6d6d6;
+  background: var(--lb-surface); color: var(--lb-text); border-color: var(--lb-border);
 }}
-.stApp [data-testid="stSelectbox"] [data-baseweb="select"] input {{ color: #202124; }}
-.stApp [data-testid="stSelectbox"] svg {{ fill: #5f6368; }}
-.stApp [data-testid="stToggle"] [data-testid="stWidgetLabel"] {{ color: #202124 !important; }}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] input {{ color: var(--lb-text); }}
+.stApp [data-testid="stSelectbox"] svg {{ fill: var(--lb-muted); }}
+.stApp div[data-testid="stVerticalBlockBorderWrapper"], .stApp .lb-card {{ background: var(--lb-surface); }}
+.stApp .lb-card {{ border-color: var(--lb-border); }}
+.stApp .lb-card .k, .stApp .lb-card .n, .stApp .lb-group .tag, .stApp .lb-note {{ color: var(--lb-muted); }}
+.stApp .lb-card .v {{ color: var(--lb-text); }}
+.stApp .lb-footer {{ background: color-mix(in srgb, var(--lb-bg) 92%, transparent); border-color:var(--lb-border); color:var(--lb-muted); }}
+.stApp .lb-footer b {{ color:var(--lb-text); }}
 
 .lb-head {{ text-align: center; margin-bottom: .9rem; }}
 .lb-title {{ margin: 0; padding: 0; line-height: 1.2; }}
@@ -439,7 +444,7 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 @media (max-width: 800px) {{ .lb-cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .lb-cards.g3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
 @media (max-width: 760px) {{ .lb-cards.g3 {{ grid-template-columns: 1fr; }} }}
-.lb-card {{ background: #fff; border: 1px solid #e7e6e1; border-radius: 14px; padding: 16px 18px; }}
+.lb-card {{ background: var(--lb-surface); border: 1px solid var(--lb-border); border-radius: 14px; padding: 16px 18px; }}
 .lb-card.hero {{ background: {ACCENT}; border-color: {ACCENT}; }}
 .lb-group {{ position: relative; transition: transform .18s ease, box-shadow .18s ease; }}
 .lb-group:hover {{ transform: translateY(-3px); box-shadow: 0 8px 22px rgba(0,0,0,.07); }}
@@ -450,26 +455,26 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 @keyframes lb-wiggle {{ 0%,100% {{ transform: rotate(0); }} 25% {{ transform: rotate(-12deg); }}
                         50% {{ transform: rotate(10deg) scale(1.08); }} 75% {{ transform: rotate(-4deg); }} }}
 @media (prefers-reduced-motion: reduce) {{ .lb-group, .lb-group:hover .lb-icon {{ animation: none; transition: none; }} }}
-.lb-group .tag {{ color: {INK_2}; font-size: .82rem; font-weight: 600; font-style: italic;
+.lb-group .tag {{ color: var(--lb-muted); font-size: .82rem; font-weight: 600; font-style: italic;
                 margin: 4px 0 6px; }}
-.lb-card .k {{ color: {INK_2}; font-size: .8rem; font-weight: 500; }}
-.lb-card .v {{ color: {INK}; font-size: 1.75rem; font-weight: 700; margin-top: 4px;
+.lb-card .k {{ color: var(--lb-muted); font-size: .8rem; font-weight: 500; }}
+.lb-card .v {{ color: var(--lb-text); font-size: 1.75rem; font-weight: 700; margin-top: 4px;
               font-variant-numeric: tabular-nums; }}
-.lb-card .n {{ color: {INK_3}; font-size: .75rem; margin-top: 2px; }}
+.lb-card .n {{ color: var(--lb-muted); font-size: .75rem; margin-top: 2px; }}
 .lb-card.hero .k, .lb-card.hero .n {{ color: rgba(255,255,255,.85); }}
 .lb-card.hero .v {{ color: #fff; }}
 
-.lb-note {{ color: {INK_2}; font-size: .82rem; margin: .2rem 0 1rem; }}
+.lb-note {{ color: var(--lb-muted); font-size: .82rem; margin: .2rem 0 1rem; }}
 
-div[data-testid="stVerticalBlockBorderWrapper"] {{ background: #fff; border-radius: 14px; }}
+div[data-testid="stVerticalBlockBorderWrapper"] {{ background: var(--lb-surface); border-radius: 14px; }}
 .stButton > button[kind="primary"] {{ background: {INK}; border: 1px solid {INK}; border-radius: 10px;
                                      font-weight: 600; padding: .55rem 1rem; }}
 .stButton > button[kind="primary"]:hover {{ background: #2b2b2a; border-color: #2b2b2a; }}
 
 .lb-footer {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; text-align: center;
-             padding: 10px 16px; background: rgba(246,246,244,.92); backdrop-filter: blur(6px);
-             border-top: 1px solid #e7e6e1; color: {INK_2}; font-size: .82rem; }}
-.lb-footer b {{ color: {INK}; font-weight: 600; }}
+             padding: 10px 16px; background: color-mix(in srgb, var(--lb-bg) 92%, transparent); backdrop-filter: blur(6px);
+             border-top: 1px solid var(--lb-border); color: var(--lb-muted); font-size: .82rem; }}
+.lb-footer b {{ color: var(--lb-text); font-weight: 600; }}
 </style>
 """
 
@@ -618,6 +623,17 @@ def group_card(name: str, part: pd.DataFrame, total: int) -> str:
 def main() -> None:
     st.set_page_config(page_title=TITLE_LINE2, page_icon="📊", layout="wide")
     st.markdown(CSS, unsafe_allow_html=True)
+    theme = st.segmented_control(
+        "Color theme", ["System", "Light", "Dark"], default="System",
+        key="color_theme", label_visibility="collapsed",
+    ) or "System"
+    if theme == "Dark":
+        theme_css = ".stApp { --lb-bg:#0e1117; --lb-surface:#1b1f27; --lb-text:#f0f2f6; --lb-muted:#b7beca; --lb-border:#343a46; color-scheme:dark; }"
+    elif theme == "Light":
+        theme_css = ".stApp { --lb-bg:#f6f6f4; --lb-surface:#fff; --lb-text:#202124; --lb-muted:#5f6368; --lb-border:#e7e6e1; color-scheme:light; }"
+    else:
+        theme_css = "@media (prefers-color-scheme: dark) { .stApp { --lb-bg:#0e1117; --lb-surface:#1b1f27; --lb-text:#f0f2f6; --lb-muted:#b7beca; --lb-border:#343a46; color-scheme:dark; } }"
+    st.markdown(f"<style>{theme_css}</style>", unsafe_allow_html=True)
     st.markdown(
         f'<div class="lb-footer">Courtesy of <b>{FOOTER_AUTHOR}</b></div>',
         unsafe_allow_html=True,
