@@ -379,33 +379,70 @@ def assign_groups(dv: pd.DataFrame, cutoff: float) -> tuple[pd.DataFrame, dict]:
 # --------------------------------------------------------------------------
 # Visual design
 # --------------------------------------------------------------------------
-INK = "#0b0b0b"          # primary text
-INK_2 = "#52514e"        # secondary text
-INK_3 = "#8a8983"        # muted text / axes
-SURFACE = "#fcfcfb"      # chart surface
-GRID = "#e9e8e4"
-ACCENT = "#2a78d6"       # top band (blue)
-OTHER = "#b4b3ad"        # everyone else (neutral)
-HIGHLIGHT = "#eb6834"    # selected participant (orange)
-# group colors: categorical slots 1-3 of the validated palette (colorblind-safe),
-# each with its own marker shape as a secondary encoding
+# Two palettes. "standard" is the soft default; "high" (high contrast) uses
+# darker marks, black text, white surfaces and stronger borders for screens or
+# browsers where the default looks washed out. Both group palettes were checked
+# for colorblind separation; every group also has its own marker shape.
+PALETTES = {
+    "standard": {
+        "INK": "#0b0b0b", "INK_2": "#52514e", "INK_3": "#8a8983",
+        "SURFACE": "#fcfcfb", "GRID": "#e9e8e4", "ACCENT": "#2a78d6",
+        "OTHER": "#b4b3ad", "HIGHLIGHT": "#eb6834",
+        "BG": "#f6f6f4", "CARD": "#ffffff", "BORDER": "#e7e6e1", "BORDER_W": "1px",
+        "FOOTER_BG": "rgba(246,246,244,.92)", "BTN_HOVER": "#2b2b2a", "SELECT_BG": "#efeeea",
+        "BAND_ALPHA": 0.07, "HATCH_ALPHA": 0.35, "GROUP_BAND_ALPHA": 0.06,
+        "ICON_TINT": "1f", "MARKER_SIZE": 26,
+        "GROUPS": ("#2a78d6", "#eb6834", "#1baf7a"),
+    },
+    "high": {
+        "INK": "#000000", "INK_2": "#1a1a1a", "INK_3": "#3d3d3d",
+        "SURFACE": "#ffffff", "GRID": "#b8b8b8", "ACCENT": "#0047b3",
+        "OTHER": "#6b6b6b", "HIGHLIGHT": "#c2410c",
+        "BG": "#ffffff", "CARD": "#ffffff", "BORDER": "#5c5c5c", "BORDER_W": "1.5px",
+        "FOOTER_BG": "#ffffff", "BTN_HOVER": "#333333", "SELECT_BG": "#ffffff",
+        "BAND_ALPHA": 0.12, "HATCH_ALPHA": 0.7, "GROUP_BAND_ALPHA": 0.10,
+        "ICON_TINT": "33", "MARKER_SIZE": 34,
+        "GROUPS": ("#0047b3", "#c2410c", "#047857"),
+    },
+}
+
+# group identity: marker shape (secondary encoding), icon and tagline;
+# the color is filled in by apply_palette()
 GROUP_STYLE = {
-    GROUP_TOP: {"color": "#2a78d6", "marker": "o", "icon": "🏆",
+    GROUP_TOP: {"color": "", "marker": "o", "icon": "🏆",
                 "tagline": "Honor-student zone. Keep defending it!"},
-    GROUP_MID: {"color": "#eb6834", "marker": "s", "icon": "🧗",
+    GROUP_MID: {"color": "", "marker": "s", "icon": "🧗",
                 "tagline": "Climbing toward the cutoff. Almost there!"},
-    GROUP_LOW: {"color": "#1baf7a", "marker": "^", "icon": "🌱",
+    GROUP_LOW: {"color": "", "marker": "^", "icon": "🌱",
                 "tagline": "Growing fast. Every experiment counts."},
 }
+
+PAL: dict = {}
+
+
+def apply_palette(name: str) -> None:
+    """Switch every module-level color used by the CSS and the charts."""
+    global PAL, INK, INK_2, INK_3, SURFACE, GRID, ACCENT, OTHER, HIGHLIGHT
+    PAL = PALETTES.get(name, PALETTES["standard"])
+    INK, INK_2, INK_3 = PAL["INK"], PAL["INK_2"], PAL["INK_3"]
+    SURFACE, GRID, ACCENT = PAL["SURFACE"], PAL["GRID"], PAL["ACCENT"]
+    OTHER, HIGHLIGHT = PAL["OTHER"], PAL["HIGHLIGHT"]
+    for group, color in zip(GROUP_STYLE, PAL["GROUPS"]):
+        GROUP_STYLE[group]["color"] = color
+
+
+apply_palette("standard")
 FOOTER_AUTHOR = cfg("FOOTER_AUTHOR", "ricardomonteiro")
 TITLE_LINE1 = cfg("TITLE_LINE1", "GCI World 2026 September")
 TITLE_LINE2 = cfg("TITLE_LINE2", "Home Credit Default Risk Competition (Unofficial) Leaderboard")
 
-CSS = f"""
+def build_css() -> str:
+    P = PAL
+    return f"""
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-serif; }}
-.stApp {{ background: #f6f6f4; }}
+.stApp {{ background: {P["BG"]}; }}
 #MainMenu, header[data-testid="stHeader"], footer, .stDeployButton {{ visibility: hidden; height: 0; }}
 .block-container {{ padding-top: 2.2rem; padding-bottom: 5rem; max-width: 1180px; }}
 
@@ -425,7 +462,7 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 @media (max-width: 800px) {{ .lb-cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .lb-cards.g3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
 @media (max-width: 760px) {{ .lb-cards.g3 {{ grid-template-columns: 1fr; }} }}
-.lb-card {{ background: #fff; border: 1px solid #e7e6e1; border-radius: 14px; padding: 16px 18px; }}
+.lb-card {{ background: {P["CARD"]}; border: {P["BORDER_W"]} solid {P["BORDER"]}; border-radius: 14px; padding: 16px 18px; }}
 .lb-card.hero {{ background: {ACCENT}; border-color: {ACCENT}; }}
 .lb-group {{ position: relative; transition: transform .18s ease, box-shadow .18s ease; }}
 .lb-group:hover {{ transform: translateY(-3px); box-shadow: 0 8px 22px rgba(0,0,0,.07); }}
@@ -442,19 +479,23 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 .lb-card .v {{ color: {INK}; font-size: 1.75rem; font-weight: 700; margin-top: 4px;
               font-variant-numeric: tabular-nums; }}
 .lb-card .n {{ color: {INK_3}; font-size: .75rem; margin-top: 2px; }}
-.lb-card.hero .k, .lb-card.hero .n {{ color: rgba(255,255,255,.85); }}
+.lb-card.hero .k, .lb-card.hero .n {{ color: #ffffff; opacity: .9; }}
 .lb-card.hero .v {{ color: #fff; }}
 
 .lb-note {{ color: {INK_2}; font-size: .82rem; margin: .2rem 0 1rem; }}
 
-div[data-testid="stVerticalBlockBorderWrapper"] {{ background: #fff; border-radius: 14px; }}
+div[data-testid="stVerticalBlockBorderWrapper"] {{ background: {P["CARD"]}; border-radius: 14px; }}
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div, [data-testid="stSelectbox"] [role="group"] {{ background: {P["SELECT_BG"]} !important; border: {P["BORDER_W"]} solid {P["BORDER"]} !important; }}
+button[data-baseweb="tab"] p {{ color: {INK_2}; font-weight: 600; }}
+button[data-baseweb="tab"][aria-selected="true"] p {{ color: {ACCENT}; }}
+div[data-testid="stToggle"] {{ display: flex; justify-content: center; margin-top: .35rem; }}
 .stButton > button[kind="primary"] {{ background: {INK}; border: 1px solid {INK}; border-radius: 10px;
                                      font-weight: 600; padding: .55rem 1rem; }}
-.stButton > button[kind="primary"]:hover {{ background: #2b2b2a; border-color: #2b2b2a; }}
+.stButton > button[kind="primary"]:hover {{ background: {P["BTN_HOVER"]}; border-color: {P["BTN_HOVER"]}; }}
 
 .lb-footer {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; text-align: center;
-             padding: 10px 16px; background: rgba(246,246,244,.92); backdrop-filter: blur(6px);
-             border-top: 1px solid #e7e6e1; color: {INK_2}; font-size: .82rem; }}
+             padding: 10px 16px; background: {P["FOOTER_BG"]}; backdrop-filter: blur(6px);
+             border-top: {P["BORDER_W"]} solid {P["BORDER"]}; color: {INK_2}; font-size: .82rem; }}
 .lb-footer b {{ color: {INK}; font-weight: 600; }}
 </style>
 """
@@ -479,17 +520,17 @@ def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str
     ylo, yhi = ymin - pad, ymax + pad
 
     # hatched top band
-    ax.axhspan(cutoff, yhi, facecolor=ACCENT, alpha=0.07, zorder=0)
-    ax.axhspan(cutoff, yhi, facecolor="none", edgecolor=ACCENT, alpha=0.35,
+    ax.axhspan(cutoff, yhi, facecolor=ACCENT, alpha=PAL["BAND_ALPHA"], zorder=0)
+    ax.axhspan(cutoff, yhi, facecolor="none", edgecolor=ACCENT, alpha=PAL["HATCH_ALPHA"],
                hatch="////", linewidth=0, zorder=0)
     ax.axhline(cutoff, color=ACCENT, lw=1.5, ls=(0, (5, 3)), zorder=1)
     ax.annotate(f"Top {fraction:.0%} cutoff  {cutoff:.5f}", xy=(df["rank"].max(), cutoff),
                 xytext=(0, 6), textcoords="offset points", ha="right", va="bottom",
                 color=INK, fontsize=10, fontweight="bold")
 
-    ax.scatter(df.loc[~top, "rank"], df.loc[~top, "score"], s=22, color=OTHER,
+    ax.scatter(df.loc[~top, "rank"], df.loc[~top, "score"], s=PAL["MARKER_SIZE"] - 4, color=OTHER,
                edgecolor=SURFACE, linewidth=0.6, label="Other participants", zorder=2)
-    ax.scatter(df.loc[top, "rank"], df.loc[top, "score"], s=26, color=ACCENT,
+    ax.scatter(df.loc[top, "rank"], df.loc[top, "score"], s=PAL["MARKER_SIZE"], color=ACCENT,
                edgecolor=SURFACE, linewidth=0.6, label=f"Top {fraction:.0%}", zorder=3)
 
     if highlight:
@@ -541,7 +582,7 @@ def make_groups_figure(dg: pd.DataFrame, info: dict, highlight: str | None, zoom
     for name, lo, hi in bands:
         if hi > lo:
             ax.axhspan(max(lo, ylo), min(hi, yhi), color=GROUP_STYLE[name]["color"],
-                       alpha=0.06, zorder=0, linewidth=0)
+                       alpha=PAL["GROUP_BAND_ALPHA"], zorder=0, linewidth=0)
     for y, label in ((info["cutoff"], f"top {TOP_FRACTION:.0%} cutoff  {info['cutoff']:.5f}"),
                      (info["split"], f"k-means split  {info['split']:.5f}")):
         if ylo < y < yhi:
@@ -552,7 +593,7 @@ def make_groups_figure(dg: pd.DataFrame, info: dict, highlight: str | None, zoom
     for name, st_ in GROUP_STYLE.items():
         part = dg[dg["group"] == name]
         visible = part[part["score"] >= ylo]
-        ax.scatter(visible["rank"], visible["score"], s=26, color=st_["color"],
+        ax.scatter(visible["rank"], visible["score"], s=PAL["MARKER_SIZE"], color=st_["color"],
                    marker=st_["marker"], edgecolor=SURFACE, linewidth=0.6, zorder=3,
                    label=f"{name} ({len(part)})")
 
@@ -591,7 +632,7 @@ def group_card(name: str, part: pd.DataFrame, total: int) -> str:
     rng = (f"{part['score'].min():.5f} – {part['score'].max():.5f}" if len(part) else "—")
     share = f"{100 * len(part) / max(total, 1):.0f}% of participants"
     return (f'<div class="lb-card lb-group" style="border-top: 4px solid {color};">'
-            f'<div class="lb-icon" style="background: {color}1f;" aria-hidden="true">'
+            f'<div class="lb-icon" style="background: {color}{PAL["ICON_TINT"]};" aria-hidden="true">'
             f'{style["icon"]}</div>'
             f'<div class="k">{name}</div><div class="v">{len(part)}</div>'
             f'<div class="tag">{style["tagline"]}</div>'
@@ -601,9 +642,22 @@ def group_card(name: str, part: pd.DataFrame, total: int) -> str:
 # --------------------------------------------------------------------------
 # User interface
 # --------------------------------------------------------------------------
+def _sync_contrast_param() -> None:
+    if st.session_state.get("high_contrast"):
+        st.query_params["contrast"] = "high"
+    else:
+        st.query_params.pop("contrast", None)
+
+
 def main() -> None:
     st.set_page_config(page_title=TITLE_LINE2, page_icon="📊", layout="wide")
-    st.markdown(CSS, unsafe_allow_html=True)
+
+    # High-contrast mode: remembered in the URL (?contrast=high) so it survives
+    # a page refresh and can be shared as a link.
+    if "high_contrast" not in st.session_state:
+        st.session_state.high_contrast = st.query_params.get("contrast") == "high"
+    apply_palette("high" if st.session_state.high_contrast else "standard")
+    st.markdown(build_css(), unsafe_allow_html=True)
     st.markdown(
         f'<div class="lb-footer">Courtesy of <b>{FOOTER_AUTHOR}</b></div>',
         unsafe_allow_html=True,
@@ -621,6 +675,9 @@ def main() -> None:
     with mid:
         if st.button("↻  Reload", type="primary", width="stretch"):
             load_leaderboard.clear()
+        st.toggle("High contrast", key="high_contrast", on_change=_sync_contrast_param,
+                  help="Darker colors and stronger borders, for screens where the "
+                       "default palette looks too light.")
 
     if cfg("OMNI_COOKIE"):
         start_keepalive()
