@@ -506,6 +506,46 @@ def card(label: str, value: str, note: str = "", hero: bool = False) -> str:
             f'<div class="v">{value}</div><div class="n">{note}</div></div>')
 
 
+def marker_style(n: int) -> dict:
+    """Marker size/edge that stay readable from ~50 to several thousand points.
+
+    With many overlapping points a white edge ring hides the fill, so the ring
+    is dropped and the markers shrink as the number of participants grows.
+    """
+    base = PAL["MARKER_SIZE"]
+    size = float(np.clip(base * (300 / max(n, 1)) ** 0.5, 7, base))
+    return {"s": size, "linewidth": 0.6 if n <= 400 else 0.0,
+            "edgecolor": SURFACE if n <= 400 else "none"}
+
+
+def y_limits(scores: pd.Series, zoom: bool) -> tuple[float, float, pd.Series]:
+    """Y range for the charts. With zoom on, the bottom 5% is hidden and a lone
+    top score far above everyone else (gap > 25% of the range) is shown as an
+    off-scale arrow instead of squashing the rest of the chart."""
+    sc = scores.sort_values(ascending=False)
+    ymin = float(sc.quantile(0.05)) if zoom else float(sc.min())
+    ymax = float(sc.iloc[0])
+    off = sc.iloc[0:0]
+    if zoom and len(sc) >= 20:
+        head = sc.iloc[:10].to_numpy()
+        span = ymax - ymin
+        gaps = head[:-1] - head[1:]
+        i = int(np.argmax(gaps))
+        if span > 0 and gaps[i] > 0.25 * span:
+            off = sc.iloc[: i + 1]
+            ymax = float(head[i + 1])
+    pad = (ymax - ymin) * 0.06 or 0.01
+    return ymin - pad, ymax + pad, off
+
+
+def mark_off_scale(ax, df: pd.DataFrame, off: pd.Series, yhi: float, color: str) -> None:
+    for idx, val in off.items():
+        r = df.loc[idx]
+        ax.annotate(f"▲ {val:.5f} (#{int(r['rank'])})", xy=(r["rank"], yhi),
+                    xytext=(6, -12), textcoords="offset points", ha="left", va="top",
+                    color=color, fontsize=9, fontweight="bold")
+
+
 def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str | None,
                 zoom: bool):
     plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 10})
@@ -514,10 +554,8 @@ def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str
     ax.set_facecolor(SURFACE)
     top = df["score"] >= cutoff
 
-    ymax = df["score"].max()
-    ymin = float(df["score"].quantile(0.05)) if zoom else float(df["score"].min())
-    pad = (ymax - ymin) * 0.06 or 0.01
-    ylo, yhi = ymin - pad, ymax + pad
+    ylo, yhi, off = y_limits(df["score"], zoom)
+    ms = marker_style(len(df))
 
     # hatched top band
     ax.axhspan(cutoff, yhi, facecolor=ACCENT, alpha=PAL["BAND_ALPHA"], zorder=0)
@@ -528,10 +566,11 @@ def make_figure(df: pd.DataFrame, cutoff: float, fraction: float, highlight: str
                 xytext=(0, 6), textcoords="offset points", ha="right", va="bottom",
                 color=INK, fontsize=10, fontweight="bold")
 
-    ax.scatter(df.loc[~top, "rank"], df.loc[~top, "score"], s=PAL["MARKER_SIZE"] - 4, color=OTHER,
-               edgecolor=SURFACE, linewidth=0.6, label="Other participants", zorder=2)
-    ax.scatter(df.loc[top, "rank"], df.loc[top, "score"], s=PAL["MARKER_SIZE"], color=ACCENT,
-               edgecolor=SURFACE, linewidth=0.6, label=f"Top {fraction:.0%}", zorder=3)
+    ax.scatter(df.loc[~top, "rank"], df.loc[~top, "score"], color=OTHER,
+               **{**ms, "s": ms["s"] * 0.85}, label="Other participants", zorder=2)
+    ax.scatter(df.loc[top, "rank"], df.loc[top, "score"], color=ACCENT,
+               **ms, label=f"Top {fraction:.0%}", zorder=3)
+    mark_off_scale(ax, df, off, yhi, ACCENT)
 
     if highlight:
         hit = df[df["participant"].str.lower() == highlight.lower()]
@@ -569,10 +608,8 @@ def make_groups_figure(dg: pd.DataFrame, info: dict, highlight: str | None, zoom
     fig.patch.set_facecolor(SURFACE)
     ax.set_facecolor(SURFACE)
 
-    ymax = dg["score"].max()
-    ymin = float(dg["score"].quantile(0.05)) if zoom else float(dg["score"].min())
-    pad = (ymax - ymin) * 0.06 or 0.01
-    ylo, yhi = ymin - pad, ymax + pad
+    ylo, yhi, off = y_limits(dg["score"], zoom)
+    ms = marker_style(len(dg))
     xmax = dg["rank"].max()
 
     # light background band per group + boundary lines with direct labels
@@ -592,10 +629,12 @@ def make_groups_figure(dg: pd.DataFrame, info: dict, highlight: str | None, zoom
 
     for name, st_ in GROUP_STYLE.items():
         part = dg[dg["group"] == name]
-        visible = part[part["score"] >= ylo]
-        ax.scatter(visible["rank"], visible["score"], s=PAL["MARKER_SIZE"], color=st_["color"],
-                   marker=st_["marker"], edgecolor=SURFACE, linewidth=0.6, zorder=3,
+        visible = part[(part["score"] >= ylo) & (part["score"] <= yhi)]
+        ax.scatter(visible["rank"], visible["score"], color=st_["color"],
+                   marker=st_["marker"], **ms, zorder=3,
                    label=f"{name} ({len(part)})")
+
+    mark_off_scale(ax, dg, off, yhi, GROUP_STYLE[GROUP_TOP]["color"])
 
     if highlight:
         hit = dg[dg["participant"].str.lower() == highlight.lower()]
