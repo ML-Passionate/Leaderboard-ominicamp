@@ -385,10 +385,10 @@ def assign_groups(dv: pd.DataFrame, cutoff: float) -> tuple[pd.DataFrame, dict]:
 # for colorblind separation; every group also has its own marker shape.
 PALETTES = {
     "standard": {
-        "INK": "#0b0b0b", "INK_2": "#52514e", "INK_3": "#8a8983",
-        "SURFACE": "#fcfcfb", "GRID": "#e9e8e4", "ACCENT": "#2a78d6",
-        "OTHER": "#b4b3ad", "HIGHLIGHT": "#eb6834",
-        "BG": "#f6f6f4", "CARD": "#ffffff", "BORDER": "#e7e6e1", "BORDER_W": "1px",
+        "INK": "#0b0b0b", "INK_2": "#454441", "INK_3": "#6e6d68",
+        "SURFACE": "#fcfcfb", "GRID": "#deddd8", "ACCENT": "#2a78d6",
+        "OTHER": "#85847f", "HIGHLIGHT": "#eb6834",
+        "BG": "#f6f6f4", "CARD": "#ffffff", "BORDER": "#dcdad4", "BORDER_W": "1px",
         "FOOTER_BG": "rgba(246,246,244,.92)", "BTN_HOVER": "#2b2b2a", "SELECT_BG": "#efeeea",
         "BAND_ALPHA": 0.07, "HATCH_ALPHA": 0.35, "GROUP_BAND_ALPHA": 0.06,
         "ICON_TINT": "1f", "MARKER_SIZE": 26,
@@ -442,9 +442,35 @@ def build_css() -> str:
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-serif; }}
-.stApp {{ background: {P["BG"]}; }}
+body, .stApp {{ --lb-bg:{P["BG"]}; --lb-surface:{P["CARD"]}; --lb-select:{P["SELECT_BG"]}; --lb-text:{INK}; --lb-muted:{INK_2}; --lb-border:{P["BORDER"]}; --lb-accent:{ACCENT}; }}
+.stApp {{ background:var(--lb-bg); color:var(--lb-text); color-scheme:light; }}
 #MainMenu, header[data-testid="stHeader"], footer, .stDeployButton {{ visibility: hidden; height: 0; }}
 .block-container {{ padding-top: 2.2rem; padding-bottom: 5rem; max-width: 1180px; }}
+
+/* Keep Streamlit controls readable against the light page and cards. */
+.stApp [data-testid="stTabs"] {{ color: var(--lb-text); }}
+.stApp [data-testid="stTabs"] button[role="tab"] {{ color: var(--lb-muted) !important; }}
+.stApp [data-testid="stTabs"] button[role="tab"][aria-selected="true"] {{ color: {ACCENT} !important; }}
+.stApp [data-testid="stTabs"] [data-testid="stMarkdownContainer"] p {{ color: inherit; }}
+.stApp [data-testid="stWidgetLabel"] p,
+.stApp [data-testid="stWidgetLabel"] label {{ color: var(--lb-text) !important; }}
+.stApp [data-testid="stToggle"] label,
+.stApp [data-testid="stToggle"] label *,
+.stApp [data-testid="stWidgetLabel"] * {{ color: var(--lb-text) !important; }}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] > div {{
+  background: var(--lb-select); color: var(--lb-text); border-color: var(--lb-border);
+}}
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] *,
+.stApp [data-testid="stSelectbox"] [data-baseweb="select"] input::placeholder {{ color: var(--lb-text) !important; }}
+.stApp [data-testid="stSelectbox"] svg {{ fill: var(--lb-muted); }}
+[data-baseweb="popover"], [role="listbox"] {{ background: var(--lb-surface); color: var(--lb-text); }}
+[role="option"] {{ color: var(--lb-text) !important; }}
+.stApp div[data-testid="stVerticalBlockBorderWrapper"], .stApp .lb-card {{ background: var(--lb-surface); }}
+.stApp .lb-card {{ border-color: var(--lb-border); }}
+.stApp .lb-card .k, .stApp .lb-card .n, .stApp .lb-group .tag, .stApp .lb-note {{ color: var(--lb-muted); }}
+.stApp .lb-card .v {{ color: var(--lb-text); }}
+.stApp .lb-footer {{ background: color-mix(in srgb, var(--lb-bg) 92%, transparent); border-color:var(--lb-border); color:var(--lb-muted); }}
+.stApp .lb-footer b {{ color:var(--lb-text); }}
 
 .lb-head {{ text-align: center; margin-bottom: .9rem; }}
 .lb-title {{ margin: 0; padding: 0; line-height: 1.2; }}
@@ -462,7 +488,7 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 @media (max-width: 800px) {{ .lb-cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); }} }}
 .lb-cards.g3 {{ grid-template-columns: repeat(3, minmax(0, 1fr)); }}
 @media (max-width: 760px) {{ .lb-cards.g3 {{ grid-template-columns: 1fr; }} }}
-.lb-card {{ background: {P["CARD"]}; border: {P["BORDER_W"]} solid {P["BORDER"]}; border-radius: 14px; padding: 16px 18px; }}
+.lb-card {{ background: var(--lb-surface); border: {P["BORDER_W"]} solid var(--lb-border); border-radius: 14px; padding: 16px 18px; }}
 .lb-card.hero {{ background: {ACCENT}; border-color: {ACCENT}; }}
 .lb-group {{ position: relative; transition: transform .18s ease, box-shadow .18s ease; }}
 .lb-group:hover {{ transform: translateY(-3px); box-shadow: 0 8px 22px rgba(0,0,0,.07); }}
@@ -473,30 +499,36 @@ html, body, [class*="css"], .stApp {{ font-family: 'Inter', system-ui, sans-seri
 @keyframes lb-wiggle {{ 0%,100% {{ transform: rotate(0); }} 25% {{ transform: rotate(-12deg); }}
                         50% {{ transform: rotate(10deg) scale(1.08); }} 75% {{ transform: rotate(-4deg); }} }}
 @media (prefers-reduced-motion: reduce) {{ .lb-group, .lb-group:hover .lb-icon {{ animation: none; transition: none; }} }}
-.lb-group .tag {{ color: {INK_2}; font-size: .82rem; font-weight: 600; font-style: italic;
+.lb-group .tag {{ color: var(--lb-muted); font-size: .82rem; font-weight: 600; font-style: italic;
                 margin: 4px 0 6px; }}
-.lb-card .k {{ color: {INK_2}; font-size: .8rem; font-weight: 500; }}
-.lb-card .v {{ color: {INK}; font-size: 1.75rem; font-weight: 700; margin-top: 4px;
+.lb-card .k {{ color: var(--lb-muted); font-size: .8rem; font-weight: 500; }}
+.lb-card .v {{ color: var(--lb-text); font-size: 1.75rem; font-weight: 700; margin-top: 4px;
               font-variant-numeric: tabular-nums; }}
-.lb-card .n {{ color: {INK_3}; font-size: .75rem; margin-top: 2px; }}
-.lb-card.hero .k, .lb-card.hero .n {{ color: #ffffff; opacity: .9; }}
+.lb-card .n {{ color: var(--lb-muted); font-size: .75rem; margin-top: 2px; }}
+.lb-card.hero .k, .lb-card.hero .n {{ color: rgba(255,255,255,.85); }}
 .lb-card.hero .v {{ color: #fff; }}
 
-.lb-note {{ color: {INK_2}; font-size: .82rem; margin: .2rem 0 1rem; }}
+.lb-note {{ color: var(--lb-muted); font-size: .82rem; margin: .2rem 0 1rem; }}
 
-div[data-testid="stVerticalBlockBorderWrapper"] {{ background: {P["CARD"]}; border-radius: 14px; }}
-[data-testid="stSelectbox"] div[data-baseweb="select"] > div, [data-testid="stSelectbox"] [role="group"] {{ background: {P["SELECT_BG"]} !important; border: {P["BORDER_W"]} solid {P["BORDER"]} !important; }}
-button[data-baseweb="tab"] p {{ color: {INK_2}; font-weight: 600; }}
-button[data-baseweb="tab"][aria-selected="true"] p {{ color: {ACCENT}; }}
+div[data-testid="stVerticalBlockBorderWrapper"] {{ background: var(--lb-surface); border-radius: 14px; }}
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div, [data-testid="stSelectbox"] [role="group"] {{ background: var(--lb-select) !important; border: {P["BORDER_W"]} solid var(--lb-border) !important; color: var(--lb-text) !important; }}
+button[data-baseweb="tab"], button[data-baseweb="tab"] * {{ color: var(--lb-muted) !important; font-weight: 600; }}
+button[data-baseweb="tab"][aria-selected="true"], button[data-baseweb="tab"][aria-selected="true"] * {{ color: var(--lb-accent) !important; }}
 div[data-testid="stToggle"] {{ display: flex; justify-content: center; margin-top: .35rem; }}
+.stApp [data-testid="stWidgetLabel"] p, .stApp [data-testid="stWidgetLabel"] label {{ color:var(--lb-text) !important; }}
+.stApp [data-testid="stSelectbox"] input {{ color:var(--lb-text); }}
+.stApp [data-testid="stSelectbox"] svg {{ fill:var(--lb-muted); }}
+.stApp .lb-card .k, .stApp .lb-card .n, .stApp .lb-group .tag, .stApp .lb-note {{ color:var(--lb-muted); }}
+.stApp .lb-card .v, .stApp .lb-title .l2, .stApp .lb-footer b {{ color:var(--lb-text); }}
+.stApp .lb-footer {{ background:color-mix(in srgb, var(--lb-bg) 92%, transparent); border-color:var(--lb-border); color:var(--lb-muted); }}
 .stButton > button[kind="primary"] {{ background: {INK}; border: 1px solid {INK}; border-radius: 10px;
                                      font-weight: 600; padding: .55rem 1rem; }}
 .stButton > button[kind="primary"]:hover {{ background: {P["BTN_HOVER"]}; border-color: {P["BTN_HOVER"]}; }}
 
 .lb-footer {{ position: fixed; left: 0; right: 0; bottom: 0; z-index: 100; text-align: center;
-             padding: 10px 16px; background: {P["FOOTER_BG"]}; backdrop-filter: blur(6px);
-             border-top: {P["BORDER_W"]} solid {P["BORDER"]}; color: {INK_2}; font-size: .82rem; }}
-.lb-footer b {{ color: {INK}; font-weight: 600; }}
+             padding: 10px 16px; background: color-mix(in srgb, var(--lb-bg) 92%, transparent); backdrop-filter: blur(6px);
+             border-top: {P["BORDER_W"]} solid var(--lb-border); color: var(--lb-muted); font-size: .82rem; }}
+.lb-footer b {{ color: var(--lb-text); font-weight: 600; }}
 </style>
 """
 
@@ -690,7 +722,6 @@ def _sync_contrast_param() -> None:
 
 def main() -> None:
     st.set_page_config(page_title=TITLE_LINE2, page_icon="📊", layout="wide")
-
     # High-contrast mode: remembered in the URL (?contrast=high) so it survives
     # a page refresh and can be shared as a link.
     if "high_contrast" not in st.session_state:
